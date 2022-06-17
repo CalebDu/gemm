@@ -81,11 +81,11 @@ namespace mm {
     template<typename scalar_t>
     __global__
     __launch_bounds__(1024)
-    void gemm_v2(const int m, const int n, const int k,
-                 scalar_t *__restrict__ a, const int lda,
-                 scalar_t *__restrict__ b, const int ldb,
-                 scalar_t *__restrict__ c, const int ldc,
-                 const scalar_t alpha, const scalar_t beta) {
+    void gemm_v2_32x32(const int m, const int n, const int k,
+                       scalar_t *__restrict__ a, const int lda,
+                       scalar_t *__restrict__ b, const int ldb,
+                       scalar_t *__restrict__ c, const int ldc,
+                       const scalar_t alpha, const scalar_t beta) {
         auto bidx = blockIdx.x, bidy = blockIdx.y,
                 tidx = threadIdx.x, tidy = threadIdx.y;
 //        auto x = bidx * blockDim.x + tidx, y = bidy * blockDim.y + tidy;
@@ -110,11 +110,11 @@ namespace mm {
 
     template<typename scalar_t>
     __global__
-    void gemm_v3(const int m, const int n, const int k,
-                 scalar_t *__restrict__ a, const int lda,
-                 scalar_t *__restrict__ b, const int ldb,
-                 scalar_t *__restrict__ c, const int ldc,
-                 const scalar_t alpha, const scalar_t beta) {
+    void gemm_v3_32x32(const int m, const int n, const int k,
+                       scalar_t *__restrict__ a, const int lda,
+                       scalar_t *__restrict__ b, const int ldb,
+                       scalar_t *__restrict__ c, const int ldc,
+                       const scalar_t alpha, const scalar_t beta) {
         auto bidx = blockIdx.x, bidy = blockIdx.y,
                 tidx = threadIdx.x, tidy = threadIdx.y;
 //        auto x = bidx * blockDim.x + tidx, y = bidy * blockDim.y + tidy;
@@ -146,11 +146,11 @@ namespace mm {
 
     template<typename scalar_t>
     __global__
-    void gemm_v4(const int m, const int n, const int k,
-                 scalar_t *__restrict__ a, const int lda,
-                 scalar_t *__restrict__ b, const int ldb,
-                 scalar_t *__restrict__ c, const int ldc,
-                 const scalar_t alpha, const scalar_t beta) {
+    void gemm_v4_32x32(const int m, const int n, const int k,
+                       scalar_t *__restrict__ a, const int lda,
+                       scalar_t *__restrict__ b, const int ldb,
+                       scalar_t *__restrict__ c, const int ldc,
+                       const scalar_t alpha, const scalar_t beta) {
         auto bidx = blockIdx.x, bidy = blockIdx.y,
                 tidx = threadIdx.x, tidy = threadIdx.y;
 //        auto x = bidx * blockDim.x + tidx, y = bidy * blockDim.y + tidy;
@@ -183,11 +183,11 @@ namespace mm {
     template<typename scalar_t, typename scalarN_t>
     __global__
     __launch_bounds__(256)
-    void gemm_v5(const int m, const int n, const int k,
-                 scalar_t *__restrict__ a, const int lda,
-                 scalar_t *__restrict__ b, const int ldb,
-                 scalar_t *__restrict__ c, const int ldc,
-                 const scalar_t alpha, const scalar_t beta) {
+    void gemm_v5_32x32(const int m, const int n, const int k,
+                       scalar_t *__restrict__ a, const int lda,
+                       scalar_t *__restrict__ b, const int ldb,
+                       scalar_t *__restrict__ c, const int ldc,
+                       const scalar_t alpha, const scalar_t beta) {
         const int N = sizeof(scalarN_t) / sizeof(scalar_t), idx = threadIdx.x,
                 x_range = ((int) (blockIdx.x + 1) << 5) - m,
                 y_range = ((int) (blockIdx.y + 1) << 5) - n;
@@ -246,6 +246,76 @@ namespace mm {
             *devC = resC;
         }
     }
+
+    template<typename scalar_t, typename scalarN_t>
+    __global__
+    __launch_bounds__(256)
+    void gemm_v6_64x64(const int m, const int n, const int k,
+                       scalar_t *__restrict__ a, const int lda,
+                       scalar_t *__restrict__ b, const int ldb,
+                       scalar_t *__restrict__ c, const int ldc,
+                       const scalar_t alpha, const scalar_t beta) {
+        const auto N = sizeof(scalarN_t) / sizeof(scalar_t);
+        auto bidx = blockIdx.x, bidy = blockIdx.y,
+                tidx = threadIdx.x;
+        auto Ntidx = N * tidx;
+        auto xRange = (((int) bidx + 1) << 5) - m,
+                yRange = (((int) bidy + 1) << 5) - n;
+        if (xRange > 0) {
+            a -= xRange;
+            c -= xRange;
+        }
+        if (yRange > 0) {
+            b -= yRange * ldb;
+            c -= yRange * ldc;
+        }
+        a += bidx << 5;
+        b += (bidy << 5) * ldb;
+        c += (bidx << 5) + (bidy << 5) * ldc;
+        scalarN_t accumulate[N];
+        memset(accumulate, 0, sizeof(accumulate));
+
+        __shared__ scalar_t buff[2048];
+        scalar_t *smemA = buff, *smemB = buff + 1024;
+
+        scalarN_t loadA = *(scalarN_t *) &(a[(Ntidx & 63) + (Ntidx >> 6) * lda]),
+                loadB = *(scalarN_t *) &(b[(Ntidx & 15) + (Ntidx >> 4) * ldb]);
+        for (int i = 0; i < k; i += (1 << 4)) {
+            ((scalarN_t *) smemA)[tidx] = loadA;
+            for (int x = 0; x < N; x++) {
+                smemB[(((Ntidx & 15) + x) << 6) + (Ntidx >> 4)] = ((scalar_t *) &loadB)[x];
+            }
+            __syncthreads();
+            if (i + (1 << 4) < k) {
+                a += lda << 4;
+                b += (1 << 4);
+                loadA = *(scalarN_t *) &(a[(Ntidx & 63) + (Ntidx >> 6) * lda]);
+                loadB = *(scalarN_t *) &(b[(Ntidx & 15) + (Ntidx >> 4) * ldb]);
+            }
+            for (int j = 0; j < 16; j++) {
+                scalarN_t tmpA = *(scalarN_t *) &(smemA[(j << 6) + (Ntidx & 63)]),
+                        tmpB = *(scalarN_t *) &(smemB[(j << 6) + (tidx >> 4) * N]);
+                for (int x = 0; x < N; x++) {
+                    for (int y = 0; y < N; y++) {
+                        ((scalar_t *) &accumulate[x])[y] +=
+                                ((scalar_t *) &tmpA)[x] * ((scalar_t *) &tmpB)[y];
+                    }
+                }
+            }
+            __syncthreads();
+        }
+        for (int x = 0; x < N; x++) {
+            scalarN_t *devC = (scalarN_t *) &(c[(tidx & 15) * 4 + ((tidx >> 4) * 4 + x) * ldc]),
+                    loadC = *devC;
+            for (int y = 0; y < N; y++) {
+                ((scalar_t *) &loadC)[y] = alpha * ((scalar_t *) &accumulate[x])[y] +
+                                           beta * ((scalar_t *) &loadC)[y];
+            }
+            *devC = loadC;
+        }
+
+    }
+
 
 }
 
