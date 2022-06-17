@@ -16,6 +16,7 @@
 #include <cutlass/util/host_tensor.h>
 #include <cutlass/util/reference/device/tensor_fill.h>
 #include <chrono>
+//#include <fmt/core.h>
 // column major general matrix multiply
 namespace mm {
 #define  IDX2c(i, j, ld) ((i) + (j)*(ld))
@@ -31,7 +32,7 @@ namespace mm {
         using cutlassGemm = cutlass::gemm::device::Gemm<scalar_t,
                 columnMajor, scalar_t, columnMajor, scalar_t, columnMajor>;
         cutlassGemm op;
-        typename cutlassGemm::arguments args(
+        typename cutlassGemm::Arguments args(
                 {m, n, k},
                 {a, lda},
                 {b, ldb},
@@ -259,8 +260,8 @@ namespace mm {
         auto bidx = blockIdx.x, bidy = blockIdx.y,
                 tidx = threadIdx.x;
         auto Ntidx = N * tidx;
-        auto xRange = (((int) bidx + 1) << 5) - m,
-                yRange = (((int) bidy + 1) << 5) - n;
+        auto xRange = (((int) bidx + 1) << 6) - m,
+                yRange = (((int) bidy + 1) << 6) - n;
         if (xRange > 0) {
             a -= xRange;
             c -= xRange;
@@ -269,9 +270,9 @@ namespace mm {
             b -= yRange * ldb;
             c -= yRange * ldc;
         }
-        a += bidx << 5;
-        b += (bidy << 5) * ldb;
-        c += (bidx << 5) + (bidy << 5) * ldc;
+        a += bidx << 6;
+        b += (bidy << 6) * ldb;
+        c += (bidx << 6) + (bidy << 6) * ldc;
         scalarN_t accumulate[N];
         memset(accumulate, 0, sizeof(accumulate));
 
@@ -298,7 +299,7 @@ namespace mm {
                 for (int x = 0; x < N; x++) {
                     for (int y = 0; y < N; y++) {
                         ((scalar_t *) &accumulate[x])[y] +=
-                                ((scalar_t *) &tmpA)[x] * ((scalar_t *) &tmpB)[y];
+                                ((scalar_t *) &tmpA)[y] * ((scalar_t *) &tmpB)[x];
                     }
                 }
             }
@@ -317,6 +318,89 @@ namespace mm {
     }
 
 
+    template<typename scalar_t, typename scalarN_t>
+    __global__
+    __launch_bounds__(256)
+    void gemm_v7_128x128(const int m, const int n, const int k,
+                         scalar_t *__restrict__ a, const int lda,
+                         scalar_t *__restrict__ b, const int ldb,
+                         scalar_t *__restrict__ c, const int ldc,
+                         const scalar_t alpha, const scalar_t beta) {
+        constexpr auto N = sizeof(scalarN_t) / sizeof(scalar_t);
+        auto tidx = threadIdx.x, bidx = blockIdx.x,
+                bidy = blockIdx.y;
+        auto xRange = (((int) bidx + 1) << 7) - m, yRange = (((int) bidy + 1) << 7) - n;
+        auto x_a = tidx & 31, y_a = tidx >> 5,
+                x_b = tidx & 1, y_b = tidx >> 1,
+                x_c = tidx & 15, y_c = tidx >> 4;
+        if (xRange > 0) {
+            a -= xRange;
+            c -= xRange;
+        }
+        if (yRange > 0) {
+            b -= yRange * ldb;
+            c -= yRange * ldc;
+        }
+        a += bidx << 7;
+        b += (bidy << 7) * ldb;
+        c += (bidx << 7) + (x_c << 2) + ((bidy << 7) + (y_c << 2)) * ldc;
+        scalarN_t accumulate[2][2][N];
+        memset(accumulate, 0, sizeof(accumulate));
+
+        __shared__ scalar_t buff[2048];
+        scalar_t *smemA = buff, *smemB = buff + 1024;
+
+        scalarN_t loadA = ((scalarN_t *) a)[x_a + y_a * (lda >> 2)],
+                loadB = ((scalarN_t *) b)[x_b + y_b * (ldb >> 2)];
+        for (int ki = 0; ki < k; ki += 8) {
+            ((scalarN_t *) smemA)[tidx] = loadA;
+            for (int x = 0; x < N; x++) {
+                smemB[(((x_b << 2) + x) << 7) + (y_b)] = ((scalar_t *) &loadB)[x];
+            }
+            __syncthreads();
+            if (ki + 8 < k) {
+                a += lda << 3;
+                b += 8;
+                loadA = ((scalarN_t *) a)[x_a + y_a * (lda >> 2)];
+                loadB = ((scalarN_t *) b)[x_b + y_b * (ldb >> 2)];
+            }
+
+#pragma unroll(4)
+            for (int l = 0; l < 8; l++) {
+                scalarN_t tmpA[2], tmpB[2];
+                for (int i = 0; i < 2; i++) {
+                    tmpA[i] = ((scalarN_t *) &(smemA[(l << 7) + (x_c << 2)]))[i << 4];
+                }
+                for (int i = 0; i < 2; i++) {
+                    tmpB[i] = ((scalarN_t *) &(smemB[(l << 7) + (y_c << 2)]))[i << 4];
+                }
+                for (int x = 0; x < 2; x++) {
+                    for (int y = 0; y < 2; y++) {
+                        for (int i = 0; i < N; i++) {
+                            for (int j = 0; j < N; j++) {
+                                ((scalar_t *) &accumulate[x][y][i])[j] += ((scalar_t *) &tmpA[x])[j] *
+                                                                          ((scalar_t *) &tmpB[y])[i];
+                            }
+                        }
+                    }
+                }
+            }
+            __syncthreads();
+        }
+        for (int x = 0; x < 2; x++) {
+            for (int y = 0; y < 2; y++) {
+                for (int i = 0; i < N; i++) {
+                    scalarN_t *devC = &((scalarN_t *) &c[ldc * (y * 64 + i)])[x << 4],
+                            loadC = *devC;
+                    for (int j = 0; j < N; j++) {
+                        ((scalar_t *) &loadC)[j] = alpha * ((scalar_t *) &accumulate[x][y][i])[j] +
+                                                   beta * ((scalar_t *) &loadC)[j];
+                    }
+                    *devC = loadC;
+                }
+            }
+        }
+    }
 }
 
 namespace util {
@@ -349,10 +433,11 @@ namespace util {
             cudaEventDestroy(end);
             total += time;
         }
-        auto meanscalar_time = total / repeat;
-        auto flops = flo * 1e3 / meanscalar_time;
+        auto mean = total / repeat;
+        auto flops = flo * 1e3 / mean;
+//        fmt::print("{}:{}ms, {:.5e}flo, {:.5e}flops\n", tag, mean, flo,flops);
+        std::printf("%s: %f ms, %e flops\n", tag.c_str(), mean, flops);
 
-        std::printf("%s: %f ms, %e flo, %e flops\n", tag.c_str(), meanscalar_time, flo, flops);
     }
 
     template<typename scalar_t>
@@ -363,7 +448,8 @@ namespace util {
             error += abs(a - b);
         }
         error = error / len;
-        printf("error: %lf\n", error);
+//        fmt::print("computation error: {:.6f}\n", error);
+        printf("computation error: %lf\n", error);
     }
 
 
