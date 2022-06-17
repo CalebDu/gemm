@@ -11,11 +11,11 @@
 #include <cutlass/gemm/device/gemm.h>
 #include <cutlass/util/host_tensor.h>
 #include <cutlass/util/reference/device/tensor_fill.h>
-
+#include <numeric>
 
 using std::chrono::high_resolution_clock;
 using std::chrono::duration_cast;
-constexpr int M = 1 << 13, N = 1 << 13, K = 1 << 13;
+constexpr int M = 1 << 10, N = 1 << 10, K = 1 << 10;
 
 int main() {
     cudaSetDevice(1);
@@ -27,8 +27,8 @@ int main() {
     const auto lda = M, ldb = K, ldc = M;
     cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dA({M, K}),
             dB({K, N}), gtC({M, N});
-    cutlass::reference::device::TensorFillRandomGaussian(dA.device_view(), seed, 10.0f, 10.0f);
-    cutlass::reference::device::TensorFillRandomGaussian(dB.device_view(), seed, 10.0f, 10.0f);
+    cutlass::reference::device::TensorFillRandomGaussian(dA.device_view(), seed, 5.0f, 1.0f);
+    cutlass::reference::device::TensorFillRandomGaussian(dB.device_view(), seed, 5.0f, 1.0f);
 
 
 //    dA.sync_host();
@@ -52,19 +52,21 @@ int main() {
                 gtC.device_data(), ldc, alpha, beta);
         });
         gtC.sync_host();
+//        auto total = std::accumulate(gtC.host_data(), gtC.host_data() + (M * N), 0.0f) / (M * N);
+//        std::printf("mean value: %f\n", total);
 //        util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
     }
-
-//    {
-//        cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
-//        util::timer("cublas_sgemm", flo, [&] {
-//            cublasSgemm_v2(hlr.h, OPA, OPB, M, N, K, &alpha,
-//                           dA.device_data(), lda, dB.device_data(), ldb, &beta,
-//                           dC.device_data(), ldc);
-//        });
-//        dC.sync_host();
-//        util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
-//    }
+//
+    {
+        cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
+        util::timer("cublas_sgemm", flo, [&] {
+            cublasSgemm_v2(hlr.h, OPA, OPB, M, N, K, &alpha,
+                           dA.device_data(), lda, dB.device_data(), ldb, &beta,
+                           dC.device_data(), ldc);
+        });
+        dC.sync_host();
+        util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
+    }
 //
 //    {
 //        cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
@@ -81,7 +83,7 @@ int main() {
 //        util::timer("gemm_v2", flo, [&] {
 //            dim3 block(32, 32);
 //            dim3 grid((M - 1) / block.x + 1, (N - 1) / block.y + 1);
-//            mm::gemm_v2<<<grid, block>>>(M, N, K, dA.device_data(), lda, dB.device_data(), ldb,
+//            mm::gemm_v2_32x32<<<grid, block>>>(M, N, K, dA.device_data(), lda, dB.device_data(), ldb,
 //                dC.device_data(), ldc, alpha, beta);
 //        });
 //        dC.sync_host();
@@ -93,7 +95,7 @@ int main() {
 //        util::timer("gemm_v3", flo, [&] {
 //            dim3 block(32, 32);
 //            dim3 grid((M - 1) / block.x + 1, (N - 1) / block.y + 1);
-//            mm::gemm_v3<<<grid, block>>>(M, N, K, dA.device_data(), lda, dB.device_data(), ldb,
+//            mm::gemm_v3_32x32<<<grid, block>>>(M, N, K, dA.device_data(), lda, dB.device_data(), ldb,
 //                dC.device_data(), ldc, alpha, beta);
 //        });
 //        dC.sync_host();
@@ -104,7 +106,7 @@ int main() {
         util::timer("gemm_v4", flo, [&] {
             dim3 block(32, 32);
             dim3 grid((M - 1) / block.x + 1, (N - 1) / block.y + 1);
-            mm::gemm_v4<<<grid, block>>>(M, N, K, dA.device_data(), lda, dB.device_data(), ldb,
+            mm::gemm_v4_32x32<<<grid, block>>>(M, N, K, dA.device_data(), lda, dB.device_data(), ldb,
                 dC.device_data(), ldc, alpha, beta);
         });
         dC.sync_host();
@@ -112,11 +114,48 @@ int main() {
     }
     {
         cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
-        util::timer("gemm_v5", flo, [&] {
+        util::timer("gemm_v5_32x32", flo, [&] {
             dim3 block(256);
-            dim3 grid((M - 1) / 32 + 1, (N - 1) / 32 + 1);
-            mm::gemm_v5<float, float4><<<grid, block>>>(M, N, K, dA.device_data(), lda, dB.device_data(), ldb,
+            constexpr int Tile = 32;
+            dim3 grid((M - 1) / Tile + 1, (N - 1) / Tile + 1);
+            mm::gemm_v5_32x32<float, float4><<<grid, block>>>(M, N, K, dA.device_data(), lda, dB.device_data(), ldb,
                 dC.device_data(), ldc, alpha, beta);
+        });
+        dC.sync_host();
+        util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
+    }
+//    {
+//        cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
+//        util::timer("gemm_v6_64x64", flo, [&] {
+//            dim3 block(256);
+//            constexpr int Tile = 64;
+//            dim3 grid((M - 1) / Tile+ 1, (N - 1) / Tile + 1);
+//            mm::gemm_v6_64x64<float, float4><<<grid, block>>>(M, N, K, dA.device_data(), lda, dB.device_data(), ldb,
+//                dC.device_data(), ldc, alpha, beta);
+//        });
+//        dC.sync_host();
+//        util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
+//    }
+//    {
+//        cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
+//        util::timer("gemm_v6_64x64", flo, [&] {
+//            dim3 block(256);
+//            constexpr int Tile = 64;
+//            dim3 grid((M - 1) / Tile + 1, (N - 1) / Tile + 1);
+//            mm::gemm_64x64<float, float4><<<grid, block>>>(M, N, K, dA.device_data(), lda, dB.device_data(), ldb,
+//                dC.device_data(), ldc, alpha, beta);
+//        });
+//        dC.sync_host();
+//        util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
+//    }
+    {
+        cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
+        util::timer("gemm_v7_128x128", flo, [&] {
+            dim3 block(256);
+            constexpr int Tile = 128;
+            dim3 grid((M - 1) / Tile + 1, (N - 1) / Tile + 1);
+            mm::gemm_v7_128x128<float, float4><<<grid, block>>>(M, N, K, dA.device_data(), lda, dB.device_data(), ldb,
+               dC.device_data(), ldc, alpha, beta);
         });
         dC.sync_host();
         util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
