@@ -3,10 +3,10 @@
 ### introduction
 $ A (M \times k)$, $B (K \times N)$,  $C (M \times N)$
 
-$ C = \alpha \times A\dotB + \beta \times C$
+$ C = \alpha \times A\dot B + \beta \times C$
 ### gemm_v1
 block$(32, 32)$ have 1024 thread, grid$((M-1)/32+1, (N-1)/32+1)$
-![img.png](figure/img.png)
+![figure1](figure/img.png)
 
 ### gemm_v2_32x32
 pointer(A, B, C) minus offset to avoid branches in the loop.
@@ -15,7 +15,7 @@ and saving threadIdx.
 ### gemm_v3_32x32
 using shared memory for local tile A(32x32), B(32x32) to optimize time of visiting global memory.
 visit global memory costs hundreds of clocks， but shared memory in the chip only cost tens of clocks.
-![img.png](figure/img2.png)
+![figure2](figure/img2.png)
 
 ### gemm_v4_32x32
 add padding in the shared memory to deal with bank conflict.
