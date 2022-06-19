@@ -1,5 +1,6 @@
 #include <iostream>
 #include "mm.cuh"
+#include "utils.cuh"
 #include <chrono>
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
