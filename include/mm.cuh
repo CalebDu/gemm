@@ -17,8 +17,7 @@
 #include <cutlass/util/reference/device/tensor_fill.h>
 #include <chrono>
 #include <fmt/core.h>
-#include <sstream>
-#include <vector>
+
 
 // column major general matrix multiply
 

@@ -5,6 +5,9 @@
 #ifndef GEMM_UTILS_CUH
 #define GEMM_UTILS_CUH
 #include <fmt/core.h>
+#include <sstream>
+#include <cublas_v2.h>
+#include <functional>
 float peak_flops;
 float cublas_flops;
 namespace util {
@@ -127,7 +130,7 @@ namespace util {
         }
         auto mean = total / repeat;
         auto flops = flo * 1e3 / mean;
-        if(tag=="cublas_sgemm") {
+        if(tag.find("cublas")) {
             cublas_flops = flops;
         }
         fmt::print("{}: {:.5f} ms,"
@@ -136,9 +139,7 @@ namespace util {
                    " {:.3f}% performance in cublas flops\n",
                    tag, mean, flops,flops/peak_flops*100,
                    flops/cublas_flops*100);
-
 //        std::printf("%s: %f ms, %e flops\n", tag.c_str(), mean, flops);
-
     }
 
 
