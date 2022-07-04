@@ -25,7 +25,7 @@ constexpr int M = 1 << 13, N = 1 << 13, K = 1 << 13;
 int main() {
 
     fmt::print("GEMM implement with CUDA\n");
-    util::initGPU();
+    util::initGPU(0);
     util::Handler hlr;
     const uint64_t seed = 100;
     const float flo = 2.0f * M * N * K;

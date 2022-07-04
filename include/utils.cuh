@@ -4,10 +4,12 @@
 
 #ifndef GEMM_UTILS_CUH
 #define GEMM_UTILS_CUH
+
 #include <fmt/core.h>
 #include <sstream>
 #include <cublas_v2.h>
 #include <functional>
+
 float peak_flops;
 float cublas_flops;
 namespace util {
@@ -100,6 +102,7 @@ namespace util {
             cublasDestroy_v2(h);
         }
     };
+
     template<typename scalar_t>
     void checkAnswer(scalar_t *ans, scalar_t *gt, uint64_t len) {
         double error = 0;
@@ -111,6 +114,7 @@ namespace util {
         fmt::print("computation error: {:.5f}\n", error);
 //        printf("computation error: %lf\n", error);
     }
+
     void timer(const std::string &tag, float flo, const std::function<void()> &gemm, int repeat = 10) {
         double total = 0.0f;
         for (int _ = 0; _ < repeat; _++) {
@@ -130,18 +134,17 @@ namespace util {
         }
         auto mean = total / repeat;
         auto flops = flo * 1e3 / mean;
-        if(tag.find("cublas")) {
+        if (tag == "cublas_sgemm") {
             cublas_flops = flops;
         }
         fmt::print("{}: {:.5f} ms,"
                    " {:.5e} flops,"
                    " {:.3f}% performance in theoretic flops,"
                    " {:.3f}% performance in cublas flops\n",
-                   tag, mean, flops,flops/peak_flops*100,
-                   flops/cublas_flops*100);
+                   tag, mean, flops, flops / peak_flops * 100,
+                   flops / cublas_flops * 100);
 //        std::printf("%s: %f ms, %e flops\n", tag.c_str(), mean, flops);
     }
-
 
 
 }

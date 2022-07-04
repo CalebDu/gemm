@@ -22,7 +22,7 @@
 // column major general matrix multiply
 
 namespace mm {
-#define  IDX2c(i, j, ld) ((i) + (j)*(ld))
+#define  IDX2C(i, j, ld) ((i) + (j)*(ld))
 
     template<typename scalar_t>
     cudaError_t cutlass_gemm(const int m, const int n, const int k,
@@ -57,7 +57,7 @@ namespace mm {
             for (int ji = 0; ji < n; ji++) {
                 for (int ii = 0; ii < m; ii++) {
 //                    c[ii * m + ji] += a[ii * k + ki] * b[ki * m + ji];
-                    c[IDX2c(ii, ji, ldc)] += a[IDX2c(ii, ki, lda)] * b[IDX2c(ki, ji, ldb)];
+                    c[IDX2C(ii, ji, ldc)] += a[IDX2C(ii, ki, lda)] * b[IDX2C(ki, ji, ldb)];
                 }
             }
         }
@@ -77,9 +77,9 @@ namespace mm {
         if (x >= m || y >= n)
             return;
         for (int i = 0; i < k; i++) {
-            sum += a[IDX2c(x, i, lda)] * b[IDX2c(i, y, ldb)];
+            sum += a[IDX2C(x, i, lda)] * b[IDX2C(i, y, ldb)];
         }
-        c[IDX2c(x, y, ldc)] = alpha * sum + beta * c[IDX2c(x, y, ldc)];
+        c[IDX2C(x, y, ldc)] = alpha * sum + beta * c[IDX2C(x, y, ldc)];
     }
 
     template<typename scalar_t>
@@ -107,9 +107,9 @@ namespace mm {
         c += (bidx << 5) + (bidy << 5) * ldc;
         scalar_t accumulate = static_cast<scalar_t>(0);
         for (int i = 0; i < k; i++) {
-            accumulate += a[IDX2c(tidx, i, lda)] * b[IDX2c(i, tidy, ldb)];
+            accumulate += a[IDX2C(tidx, i, lda)] * b[IDX2C(i, tidy, ldb)];
         }
-        c[IDX2c(tidx, tidy, ldc)] = alpha * accumulate + beta * c[IDX2c(tidx, tidy, ldc)];
+        c[IDX2C(tidx, tidy, ldc)] = alpha * accumulate + beta * c[IDX2C(tidx, tidy, ldc)];
     }
 
     template<typename scalar_t>
@@ -137,15 +137,15 @@ namespace mm {
         scalar_t accumulate = 0.0f;
         __shared__ scalar_t smemA[32][32], smemB[32][32];
         for (int i = 0; i < k; i += 32) {
-            smemA[tidx][tidy] = a[IDX2c(tidx, i + tidy, lda)];
-            smemB[tidx][tidy] = b[IDX2c(i + tidx, tidy, ldb)];
+            smemA[tidx][tidy] = a[IDX2C(tidx, i + tidy, lda)];
+            smemB[tidx][tidy] = b[IDX2C(i + tidx, tidy, ldb)];
             __syncthreads();
             for (int j = 0; j < 32; j++) {
                 accumulate += smemA[tidx][j] * smemB[j][tidy];
             }
             __syncthreads();
         }
-        c[IDX2c(tidx, tidy, ldc)] = alpha * accumulate + beta * c[IDX2c(tidx, tidy, ldc)];
+        c[IDX2C(tidx, tidy, ldc)] = alpha * accumulate + beta * c[IDX2C(tidx, tidy, ldc)];
     }
 
     template<typename scalar_t>
@@ -173,15 +173,15 @@ namespace mm {
         scalar_t accumulate = 0.0f;
         __shared__ scalar_t smemA[32][32 | 1], smemB[32][32 | 1];
         for (int i = 0; i < k; i += 32) {
-            smemA[tidx][tidy] = a[IDX2c(tidx, i + tidy, lda)];
-            smemB[tidx][tidy] = b[IDX2c(i + tidx, tidy, ldb)];
+            smemA[tidx][tidy] = a[IDX2C(tidx, i + tidy, lda)];
+            smemB[tidx][tidy] = b[IDX2C(i + tidx, tidy, ldb)];
             __syncthreads();
             for (int j = 0; j < 32; j++) {
                 accumulate += smemA[tidx][j] * smemB[j][tidy];
             }
             __syncthreads();
         }
-        c[IDX2c(tidx, tidy, ldc)] = alpha * accumulate + beta * c[IDX2c(tidx, tidy, ldc)];
+        c[IDX2C(tidx, tidy, ldc)] = alpha * accumulate + beta * c[IDX2C(tidx, tidy, ldc)];
     }
 
     template<typename scalar_t, typename scalarN_t>
