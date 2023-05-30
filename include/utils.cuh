@@ -59,14 +59,14 @@ void initGPU(int gpuId = 1) {
   auto clock = info.clockRate * 1e3f;
   auto sm = info.multiProcessorCount;
   auto cores = cc2cores(info.major, info.minor);
-  auto fp32_flops = cores * sm * clock * 2;
+  auto fp32_flops = cores * sm * clock * 2 * 1e-12;
   peak_flops = fp32_flops;
   auto info_str = fmt::format("GPU name: {} \n"
                               "Compute capability: {}.{}\n"
                               "GPU SMs: {}\n"
                               "GPU CUDA cores: {}\n"
                               "GPU SM clock rate: {:.4f} GLOPS\n"
-                              "FP32 theoretical FLOPS: {:.5e}\n",
+                              "FP32 theoretical: {:.5e} TFLOPS\n",
                               info.name, info.major, info.minor, sm, cores * sm,
                               clock * 1e-9f, fp32_flops);
   displayWithFrame(info_str);
@@ -109,14 +109,14 @@ void timer(const std::string &tag, float flo, const std::function<void()> &gemm,
   cudaEventDestroy(begin);
   cudaEventDestroy(end);
   auto mean = static_cast<double>(total) / repeat;
-  auto flops = flo * 1e3 / mean;
+  auto flops = flo * 1e3 * 1e-12 / mean;
   if (tag == "cublas_sgemm") {
     cublas_flops = flops;
   }
   fmt::print("{}: {:.5f} ms,"
              " {:.5e} flops,"
-             " {:.3f}% performance in theoretic flops,"
-             " {:.3f}% performance in cublas flops\n",
+             " {:.3f}% performance in theoretic tflops,"
+             " {:.3f}% performance in cublas tflops\n",
              tag, mean, flops, flops / peak_flops * 100,
              flops / cublas_flops * 100);
   //        std::printf("%s: %f ms, %e flops\n", tag.c_str(), mean, flops);

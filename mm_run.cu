@@ -83,81 +83,81 @@ int main() {
     dC.sync_host();
     util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
   }
-  {
-    cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
-    util::timer("gemm_v1", flo, [&] {
-      dim3 block(32, 32);
-      dim3 grid((M - 1) / block.x + 1, (N - 1) / block.y + 1);
-      mm::gemm_v1<<<grid, block>>>(M, N, K, dA.device_data(), lda,
-                                   dB.device_data(), ldb, dC.device_data(), ldc,
-                                   alpha, beta);
-    });
-    dC.sync_host();
-    util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
-  }
-  {
-    cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
-    util::timer("gemm_v2", flo, [&] {
-      dim3 block(32, 32);
-      dim3 grid((M - 1) / block.x + 1, (N - 1) / block.y + 1);
-      mm::gemm_v2_32x32<<<grid, block>>>(M, N, K, dA.device_data(), lda,
-                                         dB.device_data(), ldb,
-                                         dC.device_data(), ldc, alpha, beta);
-    });
-    dC.sync_host();
-    util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
-  }
-  {
-    cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
+  // {
+  //   cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
+  //   util::timer("gemm_v1", flo, [&] {
+  //     dim3 block(32, 32);
+  //     dim3 grid((M - 1) / block.x + 1, (N - 1) / block.y + 1);
+  //     mm::gemm_v1<<<grid, block>>>(M, N, K, dA.device_data(), lda,
+  //                                  dB.device_data(), ldb, dC.device_data(),
+  //                                  ldc, alpha, beta);
+  //   });
+  //   dC.sync_host();
+  //   util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
+  // }
+  // {
+  //   cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
+  //   util::timer("gemm_v2", flo, [&] {
+  //     dim3 block(32, 32);
+  //     dim3 grid((M - 1) / block.x + 1, (N - 1) / block.y + 1);
+  //     mm::gemm_v2_32x32<<<grid, block>>>(M, N, K, dA.device_data(), lda,
+  //                                        dB.device_data(), ldb,
+  //                                        dC.device_data(), ldc, alpha, beta);
+  //   });
+  //   dC.sync_host();
+  //   util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
+  // }
+  // {
+  //   cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
 
-    util::timer("gemm_v3", flo, [&] {
-      dim3 block(32, 32);
-      dim3 grid((M - 1) / block.x + 1, (N - 1) / block.y + 1);
-      mm::gemm_v3_32x32<<<grid, block>>>(M, N, K, dA.device_data(), lda,
-                                         dB.device_data(), ldb,
-                                         dC.device_data(), ldc, alpha, beta);
-    });
-    dC.sync_host();
-    util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
-  }
-  {
-    cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
-    util::timer("gemm_v4", flo, [&] {
-      dim3 block(32, 32);
-      dim3 grid((M - 1) / block.x + 1, (N - 1) / block.y + 1);
-      mm::gemm_v4_32x32<<<grid, block>>>(M, N, K, dA.device_data(), lda,
-                                         dB.device_data(), ldb,
-                                         dC.device_data(), ldc, alpha, beta);
-    });
-    dC.sync_host();
-    util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
-  }
-  {
-    cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
-    util::timer("gemm_v5_32x32", flo, [&] {
-      dim3 block(256);
-      constexpr int Tile = 32;
-      dim3 grid((M - 1) / Tile + 1, (N - 1) / Tile + 1);
-      mm::gemm_v5_32x32<float, float4>
-          <<<grid, block>>>(M, N, K, dA.device_data(), lda, dB.device_data(),
-                            ldb, dC.device_data(), ldc, alpha, beta);
-    });
-    dC.sync_host();
-    util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
-  }
-  {
-    cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
-    util::timer("gemm_v6_64x64", flo, [&] {
-      dim3 block(256);
-      constexpr int Tile = 64;
-      dim3 grid((M - 1) / Tile + 1, (N - 1) / Tile + 1);
-      mm::gemm_v6_64x64<float, float4>
-          <<<grid, block>>>(M, N, K, dA.device_data(), lda, dB.device_data(),
-                            ldb, dC.device_data(), ldc, alpha, beta);
-    });
-    dC.sync_host();
-    util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
-  }
+  //   util::timer("gemm_v3", flo, [&] {
+  //     dim3 block(32, 32);
+  //     dim3 grid((M - 1) / block.x + 1, (N - 1) / block.y + 1);
+  //     mm::gemm_v3_32x32<<<grid, block>>>(M, N, K, dA.device_data(), lda,
+  //                                        dB.device_data(), ldb,
+  //                                        dC.device_data(), ldc, alpha, beta);
+  //   });
+  //   dC.sync_host();
+  //   util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
+  // }
+  // {
+  //   cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
+  //   util::timer("gemm_v4", flo, [&] {
+  //     dim3 block(32, 32);
+  //     dim3 grid((M - 1) / block.x + 1, (N - 1) / block.y + 1);
+  //     mm::gemm_v4_32x32<<<grid, block>>>(M, N, K, dA.device_data(), lda,
+  //                                        dB.device_data(), ldb,
+  //                                        dC.device_data(), ldc, alpha, beta);
+  //   });
+  //   dC.sync_host();
+  //   util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
+  // }
+  // {
+  //   cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
+  //   util::timer("gemm_v5_32x32", flo, [&] {
+  //     dim3 block(256);
+  //     constexpr int Tile = 32;
+  //     dim3 grid((M - 1) / Tile + 1, (N - 1) / Tile + 1);
+  //     mm::gemm_v5_32x32<float, float4>
+  //         <<<grid, block>>>(M, N, K, dA.device_data(), lda, dB.device_data(),
+  //                           ldb, dC.device_data(), ldc, alpha, beta);
+  //   });
+  //   dC.sync_host();
+  //   util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
+  // }
+  // {
+  //   cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
+  //   util::timer("gemm_v6_64x64", flo, [&] {
+  //     dim3 block(256);
+  //     constexpr int Tile = 64;
+  //     dim3 grid((M - 1) / Tile + 1, (N - 1) / Tile + 1);
+  //     mm::gemm_v6_64x64<float, float4>
+  //         <<<grid, block>>>(M, N, K, dA.device_data(), lda, dB.device_data(),
+  //                           ldb, dC.device_data(), ldc, alpha, beta);
+  //   });
+  //   dC.sync_host();
+  //   util::checkAnswer(dC.host_data(), gtC.host_data(), M * N);
+  // }
 
   {
     cutlass::HostTensor<float, cutlass::layout::ColumnMajor> dC({M, N});
